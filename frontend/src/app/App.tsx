@@ -6,6 +6,7 @@ import { InquiryPage } from '../features/inquiries/InquiryPage';
 import { LeadListPage } from '../features/leads/LeadListPage';
 import { LeadDetailPage } from '../features/leads/LeadDetailPage';
 import { NewLeadPage } from '../features/leads/NewLeadPage';
+import { TaskListPage } from '../features/tasks/TaskListPage';
 import { Notice } from '../components/ui/Notice';
 import { AppShell } from './AppShell';
 
@@ -56,6 +57,14 @@ export function App() {
               element={
                 <Protected>
                   <NewLeadPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/app/tasks"
+              element={
+                <Protected>
+                  <TaskListPage />
                 </Protected>
               }
             />

@@ -1,15 +1,18 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import generics, status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from crm.models import Lead
+from crm.models import FollowUpTask, Lead
 from crm.services import create_inquiry
+from crm.tasks import cancel_task, complete_task, reschedule_task, schedule_task
 from crm.workflow import (
     add_note,
     assign_lead,
@@ -25,6 +28,7 @@ from .serializers import (
     AssignmentSerializer,
     ClaimSerializer,
     ContactSerializer,
+    FollowUpTaskSerializer,
     InquirySerializer,
     LeadDetailSerializer,
     LeadListSerializer,
@@ -32,6 +36,9 @@ from .serializers import (
     NoteSerializer,
     ReopenSerializer,
     StageSerializer,
+    TaskActionSerializer,
+    TaskRescheduleSerializer,
+    TaskScheduleSerializer,
 )
 
 User = get_user_model()
@@ -52,7 +59,7 @@ class InquiryView(APIView):
 
 class LeadListView(generics.ListAPIView):
     serializer_class = LeadListSerializer
-    queryset = Lead.objects.select_related("owner").all()
+    queryset = Lead.objects.select_related("owner").prefetch_related("tasks").all()
 
     def post(self, request):
         serializer = ManualLeadSerializer(data=request.data)
@@ -66,7 +73,33 @@ class LeadListView(generics.ListAPIView):
 
 class LeadDetailView(generics.RetrieveAPIView):
     serializer_class = LeadDetailSerializer
-    queryset = Lead.objects.select_related("owner").prefetch_related("activity__actor").all()
+    queryset = (
+        Lead.objects.select_related("owner").prefetch_related("activity__actor", "tasks").all()
+    )
+
+
+class TaskListView(generics.ListAPIView):
+    serializer_class = FollowUpTaskSerializer
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        queryset = FollowUpTask.objects.select_related("lead", "lead__owner")
+        task_status = self.request.query_params.get("status", "pending")
+        if task_status not in FollowUpTask.Status.values:
+            raise ValidationError({"status": ["Choose pending, completed, or cancelled."]})
+        queryset = queryset.filter(status=task_status)
+        due_filter = self.request.query_params.get("due", "")
+        now = timezone.now()
+        if due_filter == "overdue":
+            if task_status != FollowUpTask.Status.PENDING:
+                raise ValidationError({"due": ["Overdue applies only to pending follow-ups."]})
+            queryset = queryset.filter(due_at__lt=now)
+        elif due_filter == "today":
+            today = timezone.localdate()
+            queryset = queryset.filter(due_at__date=today)
+        elif due_filter and due_filter != "all":
+            raise ValidationError({"due": ["Choose overdue, today, or all."]})
+        return queryset.order_by("due_at", "id")
 
 
 class TeamView(APIView):
@@ -92,7 +125,9 @@ class LeadActionView(APIView):
         values = serializer.validated_data
         lead = self.action(pk, request.user, values)
         lead = (
-            Lead.objects.select_related("owner").prefetch_related("activity__actor").get(pk=lead.pk)
+            Lead.objects.select_related("owner")
+            .prefetch_related("activity__actor", "tasks")
+            .get(pk=lead.pk)
         )
         return Response(LeadDetailSerializer(lead, context={"request": request}).data)
 
@@ -172,3 +207,77 @@ class AddNoteView(LeadActionView):
             values["body"],
         )
     )
+
+
+class ScheduleTaskView(LeadActionView):
+    serializer_class = TaskScheduleSerializer
+    action = staticmethod(
+        lambda pk, actor, values: schedule_task(
+            pk,
+            actor,
+            values["action_key"],
+            values["expected_version"],
+            values["title"],
+            values["details"],
+            values["due_at"],
+        )
+    )
+
+
+class TaskActionView(APIView):
+    serializer_class = TaskActionSerializer
+    action = None
+
+    def post(self, request, lead_pk, task_pk):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        lead = self.action(
+            lead_pk,
+            task_pk,
+            request.user,
+            values["action_key"],
+            values["expected_version"],
+        )
+        lead = (
+            Lead.objects.select_related("owner")
+            .prefetch_related("activity__actor", "tasks")
+            .get(pk=lead.pk)
+        )
+        return Response(LeadDetailSerializer(lead, context={"request": request}).data)
+
+
+class RescheduleTaskView(TaskActionView):
+    serializer_class = TaskRescheduleSerializer
+    action = staticmethod(
+        lambda lead_pk, task_pk, actor, action_key, expected_version, due_at=None: reschedule_task(
+            lead_pk, task_pk, actor, action_key, expected_version, due_at
+        )
+    )
+
+    def post(self, request, lead_pk, task_pk):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        lead = self.action(
+            lead_pk,
+            task_pk,
+            request.user,
+            values["action_key"],
+            values["expected_version"],
+            values["due_at"],
+        )
+        lead = (
+            Lead.objects.select_related("owner")
+            .prefetch_related("activity__actor", "tasks")
+            .get(pk=lead.pk)
+        )
+        return Response(LeadDetailSerializer(lead, context={"request": request}).data)
+
+
+class CompleteTaskView(TaskActionView):
+    action = staticmethod(complete_task)
+
+
+class CancelTaskView(TaskActionView):
+    action = staticmethod(cancel_task)

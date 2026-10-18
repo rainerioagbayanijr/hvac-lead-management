@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
-from crm.models import ActivityEvent, Lead
+from crm.models import ActivityEvent, FollowUpTask, Lead
 
 
 class InquirySerializer(serializers.Serializer):
@@ -95,6 +95,12 @@ class ActivitySerializer(serializers.ModelSerializer):
             summary = data.get("summary", "")
             suffix = f" {summary}" if summary else ""
             return f"{method.title()} recorded.{stage_change}{suffix}"
+        if event.event_type == "stage_changed" and data.get("cancelled_tasks"):
+            return (
+                f"Moved from {data.get('stage_from', '').title()} to "
+                f"{data.get('stage_to', '').title()} · "
+                f"{data.get('cancelled_tasks')} open follow-up(s) cancelled."
+            )
         if event.event_type == "stage_changed":
             before = data.get("stage_from", "")
             after = data.get("stage_to", "")
@@ -107,13 +113,54 @@ class ActivitySerializer(serializers.ModelSerializer):
             return f"Moved from {before.title()} to {after.title()}."
         if event.event_type == "lead_reopened":
             return f"Reopened at {data.get('stage_to', '').title()}."
+        if event.event_type == "task_scheduled":
+            return f"Follow-up scheduled: {data.get('title', 'Task')}."
+        if event.event_type == "task_rescheduled":
+            return f"Follow-up rescheduled: {data.get('title', 'Task')}."
+        if event.event_type == "task_completed":
+            return f"Follow-up completed: {data.get('title', 'Task')}."
+        if event.event_type == "task_cancelled":
+            return f"Follow-up cancelled: {data.get('title', 'Task')}."
         if event.event_type == "note_added":
             return data.get("body", "Note added.")
         return "Lead activity recorded."
 
 
+class FollowUpTaskSerializer(serializers.ModelSerializer):
+    lead_name = serializers.CharField(source="lead.name", read_only=True)
+    lead_stage = serializers.CharField(source="lead.get_stage_display", read_only=True)
+    lead_version = serializers.IntegerField(source="lead.version", read_only=True)
+    owner_name = serializers.CharField(
+        source="lead.owner.display_name", default=None, read_only=True
+    )
+    is_overdue = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FollowUpTask
+        fields = [
+            "id",
+            "lead_id",
+            "lead_name",
+            "lead_stage",
+            "lead_version",
+            "owner_name",
+            "title",
+            "details",
+            "due_at",
+            "status",
+            "completed_at",
+            "cancelled_at",
+            "created_at",
+            "is_overdue",
+        ]
+
+    def get_is_overdue(self, task):
+        return task.status == FollowUpTask.Status.PENDING and task.due_at < timezone.now()
+
+
 class LeadDetailSerializer(LeadListSerializer):
     activity = ActivitySerializer(many=True, read_only=True)
+    tasks = FollowUpTaskSerializer(many=True, read_only=True)
 
     class Meta(LeadListSerializer.Meta):
         fields = LeadListSerializer.Meta.fields + [
@@ -123,6 +170,7 @@ class LeadDetailSerializer(LeadListSerializer):
             "updated_at",
             "version",
             "activity",
+            "tasks",
             "first_contact_at",
             "quote_amount",
             "loss_reason",
@@ -174,6 +222,44 @@ class ReopenSerializer(LeadActionSerializer):
 
 class NoteSerializer(LeadActionSerializer):
     body = serializers.CharField(max_length=2000)
+
+
+class TaskScheduleSerializer(LeadActionSerializer):
+    title = serializers.CharField(max_length=120)
+    details = serializers.CharField(max_length=500, allow_blank=True, default="")
+    due_at = serializers.DateTimeField()
+
+    def validate_title(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Enter a follow-up title.")
+        return value
+
+    def validate_due_at(self, value):
+        raw = self.initial_data.get("due_at")
+        parsed = parse_datetime(raw) if isinstance(raw, str) else raw
+        if parsed is None or timezone.is_naive(parsed):
+            raise serializers.ValidationError("Include a time-zone offset.")
+        if parsed <= timezone.now():
+            raise serializers.ValidationError("Choose a future date and time.")
+        return value
+
+
+class TaskRescheduleSerializer(LeadActionSerializer):
+    due_at = serializers.DateTimeField()
+
+    def validate_due_at(self, value):
+        raw = self.initial_data.get("due_at")
+        parsed = parse_datetime(raw) if isinstance(raw, str) else raw
+        if parsed is None or timezone.is_naive(parsed):
+            raise serializers.ValidationError("Include a time-zone offset.")
+        if parsed <= timezone.now():
+            raise serializers.ValidationError("Choose a future date and time.")
+        return value
+
+
+class TaskActionSerializer(LeadActionSerializer):
+    pass
 
 
 class ManualLeadSerializer(StrictSerializer):

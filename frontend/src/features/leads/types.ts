@@ -29,6 +29,23 @@ export type LeadDetail = Lead & {
     actor_name: string | null;
     summary: string;
   }[];
+  tasks: FollowUpTask[];
+};
+export type FollowUpTask = {
+  id: string;
+  lead_id: string;
+  lead_name: string;
+  lead_stage: string;
+  lead_version: number;
+  owner_name: string | null;
+  title: string;
+  details: string;
+  due_at: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  completed_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  is_overdue: boolean;
 };
 export type LeadPage = {
   count: number;

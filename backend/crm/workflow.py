@@ -10,7 +10,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 
 from config.api import Conflict
 
-from .models import ActivityEvent, Lead
+from .models import ActivityEvent, FollowUpTask, Lead
 
 User = get_user_model()
 
@@ -160,12 +160,20 @@ def change_stage(lead_id, actor, action_key, expected_version, stage, quote_amou
             lead.stage = stage
             lead.loss_reason = reason
             lead.closed_at = timezone.now()
+            cancelled_count = FollowUpTask.objects.filter(
+                lead=lead, status=FollowUpTask.Status.PENDING
+            ).update(
+                status=FollowUpTask.Status.CANCELLED,
+                cancelled_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
             return (
                 "stage_changed",
                 {
                     "stage_from": current,
                     "stage_to": stage,
                     "loss_reason": reason,
+                    "cancelled_tasks": cancelled_count,
                 },
                 ["stage", "loss_reason", "closed_at"],
             )
@@ -190,6 +198,13 @@ def change_stage(lead_id, actor, action_key, expected_version, stage, quote_amou
                 raise ValidationError({"quote_amount": ["Record a quote before marking this won."]})
             lead.closed_at = timezone.now()
             update_fields.append("closed_at")
+            metadata["cancelled_tasks"] = FollowUpTask.objects.filter(
+                lead=lead, status=FollowUpTask.Status.PENDING
+            ).update(
+                status=FollowUpTask.Status.CANCELLED,
+                cancelled_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
         lead.stage = stage
         return "stage_changed", metadata, update_fields
 

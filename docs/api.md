@@ -1,4 +1,4 @@
-# API contract — Milestone 3
+# API contract — Milestone 4
 
 All application routes below use the prefix `/api/v1/`. Responses are JSON. Protected endpoints use Django sessions; application roles do not grant anonymous access.
 
@@ -18,6 +18,11 @@ All application routes below use the prefix `/api/v1/`. Responses are JSON. Prot
 | POST | `leads/{uuid}/stage/` | Lead owner or admin | Add a quote, change stage, or close Lost |
 | POST | `leads/{uuid}/reopen/` | Admin role | Reopen a Won/Lost lead |
 | POST | `leads/{uuid}/notes/` | Lead owner or admin | Append an internal note |
+| GET | `tasks/?status=pending&due=overdue` | Authenticated | Paginated follow-ups; status is pending/completed/cancelled, due is all/today/overdue |
+| POST | `leads/{uuid}/tasks/` | Lead owner or admin | Schedule a task with a timezone-aware due time |
+| POST | `leads/{uuid}/tasks/{task_uuid}/reschedule/` | Lead owner or admin | Move a pending task to another future due time |
+| POST | `leads/{uuid}/tasks/{task_uuid}/complete/` | Lead owner or admin | Complete a pending task |
+| POST | `leads/{uuid}/tasks/{task_uuid}/cancel/` | Lead owner or admin | Cancel a pending task |
 | GET | `team/` | Admin role | List active users for assignment |
 | GET/HEAD | `health/` | Public | Minimal database-aware readiness |
 
@@ -60,6 +65,9 @@ Every action POST includes `action_key` (a client-generated UUID) and `expected_
 - `stage/`: New can be marked Contacted or Lost; Contacted can be Quoted or Lost; Quoted can be Won or Lost. Quoted requires a positive `quote_amount` in SGD; Lost requires `loss_reason`. Won requires an existing quote.
 - `reopen/`: an admin chooses New, Contacted, or Quoted. Quoted is available only if a quote exists. Historical close events remain in activity.
 - `notes/`: `body` is a nonblank internal note up to 2,000 characters. Notes append to history and cannot be edited or deleted.
+- `tasks/`: `title` (nonblank, maximum 120), optional `details` (maximum 500), and a future ISO `due_at` with an explicit UTC offset are required. Tasks are visible to the whole team; only the lead owner or admin can change them. Action keys and the lead version make task updates safe to retry and reject stale edits.
+- Task list: defaults to pending tasks; filter with `status=pending|completed|cancelled` and `due=all|today|overdue`. Overdue is calculated from pending state and current server time. Lead reassignment changes the responsible owner shown because the task follows its lead.
+- Closing Won or Lost cancels pending tasks within the same database transaction. Reopening does not revive them; create a new follow-up explicitly.
 - Manual `POST leads/`: name, at least one contact method, service type, source, and (when supplied) a time-zone-aware `received_at` are validated. The server uses its current time when `received_at` is omitted. A staff creator owns the new lead; an admin creator leaves it unassigned. Receipt times in the future are rejected.
 
 Staff can see all team leads but can mutate only assigned leads; they can self-claim unassigned active leads. Admin application roles can mutate and assign any lead. These checks are enforced by the API and services even if the interface is bypassed.

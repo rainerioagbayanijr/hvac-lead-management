@@ -2,7 +2,7 @@
 
 A single-business lead and follow-up application for a small air-conditioning installation and maintenance company.
 
-**Current status: Milestone 3 complete — staff can work a lead from intake through Won/Lost.** Customers can submit service inquiries; staff can claim or receive assignments, record contact, quotes and notes, and move leads through the sales stages. Admins can assign, reassign, and reopen leads. This remains a local development build; follow-up tasks, dashboards, email integration, hosted demo, and deployment are still planned.
+**Current status: Milestone 4 complete — staff can schedule and manage follow-ups for leads.** Customers can submit inquiries; staff can claim or receive assignments, record contact, quotes and notes, move leads through sales stages, and schedule, reschedule, complete, or cancel follow-up tasks. Overdue work is highlighted, and closed leads cancel open tasks with an activity record. Dashboard metrics, email integration, hosted demo, and deployment remain planned.
 
 ## Build progress
 
@@ -11,8 +11,8 @@ A single-business lead and follow-up application for a small air-conditioning in
 | 1. Local foundation and contracts | Complete | Django, PostgreSQL, Vite, configuration, migrations, and readiness check |
 | 2. Accounts and inquiry intake | Complete | Public inquiry form, staff sessions, protected lead list/detail, validation, and duplicate protection |
 | 3. Lead ownership and sales workflow | Complete | Claim and assign leads, record contact and quotes, change stages, add notes, and show activity history |
-| 4. Follow-up tasks | Next | Schedule, reschedule, complete, and cancel follow-ups; identify overdue work |
-| 5. Working interface and dashboard | Todo | Search and filters, pipeline, responsive workflow screens, and business metrics |
+| 4. Follow-up tasks | Complete | Schedule, reschedule, complete, and cancel tasks; identify overdue work |
+| 5. Working interface and dashboard | Next | Search and filters, pipeline, responsive workflow screens, and business metrics |
 | 6. Reliable external integration | Todo | Simulated and live email adapters, recorded attempts, safe retry, and delivery events |
 | 7. Verification and hosted demo | Todo | Critical browser checks, synthetic demo data, deployment, backup restore, and rollback rehearsal |
 | 8. Portfolio packaging | Todo | Screenshots, architecture overview, walkthrough, and evidence-based case study |
@@ -26,10 +26,13 @@ Update this table and the current-status paragraph when a milestone is completed
 - Lets staff log in, see all submitted leads, and open a lead's details.
 - Lets staff claim unassigned leads and change only their assigned leads; admins can assign, reassign, and reopen.
 - Records manual inquiries, customer contact, first response, SGD quotes, Won/Lost outcomes, internal notes, and dated history.
+- Lets a lead owner or admin schedule, reschedule, complete, and cancel follow-up tasks; task changes appear in activity history.
+- Shows open, completed, and cancelled follow-ups; overdue status is calculated from the due time and current time.
+- Cancels open follow-ups when a lead is marked Won or Lost and records the cancellation count in lead history.
 - Protects staff screens and API data with Django sessions and CSRF checks.
 - Validates requests, limits repeated public requests, and reports service health.
 
-The current build does not schedule follow-up tasks, show pipeline metrics, or send integration alerts. Calls, messages, and quotes remain manual.
+The current build does not send automatic reminders, show pipeline metrics, or send integration alerts. Calls, messages, and quotes remain manual.
 
 Milestone 3's synthetic browser walkthrough is in [milestone-3-workflow.png](docs/screenshots/milestone-3-workflow.png). See the [Milestone 3 build and verification notes](docs/milestone-3.md).
 
@@ -115,6 +118,8 @@ The test command names the backend apps explicitly because running discovery fro
 - `backend/config/`: environment settings, middleware, routing, and API error handling.
 - `backend/accounts/`: users, CSRF-protected sessions, and local account setup.
 - `backend/crm/`: lead/history models, transactional public intake, and protected read APIs.
+- `backend/crm/tasks.py`: transactional follow-up task rules; task API endpoints are in `backend/crm/api/`.
+- `frontend/src/features/tasks/`: team follow-up list; task creation and history are on each lead detail page.
 - `backend/operations/`: readiness and shared rate limits.
 - `frontend/src/app/`: application shell and route protection; `features/` contains inquiry, login, and lead screens.
 - `compose.yaml`: local PostgreSQL only.
@@ -139,8 +144,8 @@ Other skeleton files remain empty until their milestone needs them. Deployment s
 4. Refresh the page to check the session persists; log out to check private pages redirect to login.
 5. If submission cannot be confirmed, retry the same inquiry. The screen locks its details and reuses the submission key to avoid accidental duplicates. Only the opaque key is retained in session storage; customer fields are kept in component memory.
 
-See [Milestone 2](docs/milestone-2.md) and [Milestone 3](docs/milestone-3.md) testing notes for results and limits.
+See [Milestone 2](docs/milestone-2.md), [Milestone 3](docs/milestone-3.md), and [Milestone 4](docs/milestone-4.md) testing notes for results and limits.
 
 ## Next milestone
 
-Milestone 4: add follow-up tasks staff can schedule, reschedule, complete, and cancel, and highlight overdue work. Open tasks will follow lead reassignment; closing a lead will cancel open tasks with a recorded reason. See the [Milestone 4 acceptance checks](docs/implementation-plan.md#milestone-4--follow-up-tasks).
+Milestone 5: improve lead search and filters, add a simple pipeline view, and show response and follow-up metrics. See the [Milestone 5 acceptance checks](docs/implementation-plan.md#milestone-5--working-interface-and-dashboard).

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { Link, useParams } from 'react-router';
 import { Notice } from '../../components/ui/Notice';
 import { api, ApiError, errorMessage } from '../../lib/api';
-import { formatDate } from '../../lib/dates';
+import { formatDate, singaporeDateAtNine, singaporeInputToIso } from '../../lib/dates';
 import { useAuth } from '../auth/AuthProvider';
 import type { LeadDetail } from './types';
 
@@ -39,6 +39,10 @@ export function LeadDetailPage() {
   const [lossReason, setLossReason] = useState('');
   const [reopenStage, setReopenStage] = useState('new');
   const [note, setNote] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDetails, setTaskDetails] = useState('');
+  const [taskDue, setTaskDue] = useState(singaporeDateAtNine());
+  const [taskDueChanges, setTaskDueChanges] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState('');
@@ -91,6 +95,11 @@ export function LeadDetailPage() {
       retryKeys.current = {};
       if (action === 'contact') setContactSummary('');
       if (action === 'notes') setNote('');
+      if (action === 'tasks') {
+        setTaskTitle('');
+        setTaskDetails('');
+        setTaskDue(singaporeDateAtNine());
+      }
       if (action === 'stage') {
         setQuoteAmount('');
         setLossReason('');
@@ -293,6 +302,13 @@ export function LeadDetailPage() {
 
                     <section className="panel">
                       <h2 className="text-lg font-semibold">Update pipeline stage</h2>
+                      {lead.tasks.some((task) => task.status === 'pending') && (
+                        <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                          Marking this inquiry Won or Lost will cancel{' '}
+                          {lead.tasks.filter((task) => task.status === 'pending').length} open
+                          follow-up(s). You can schedule new work if an admin reopens it.
+                        </p>
+                      )}
                       {lead.stage === 'contacted' && (
                         <form
                           className="mt-5 space-y-4"
@@ -389,6 +405,152 @@ export function LeadDetailPage() {
                     </div>
                   </section>
                 )}
+
+                <section className="panel">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-semibold">Follow-up tasks</h2>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Plan the next call or customer update. Reminders are manual in this
+                        milestone.
+                      </p>
+                    </div>
+                    <Link
+                      className="text-sm font-semibold text-blue-700 hover:underline"
+                      to="/app/tasks"
+                    >
+                      All follow-ups
+                    </Link>
+                  </div>
+                  {lead.tasks.length > 0 ? (
+                    <ul className="mt-5 space-y-3">
+                      {lead.tasks.map((task) => (
+                        <li className="rounded-xl border border-slate-200 p-4" key={task.id}>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-medium">{task.title}</h3>
+                                {task.is_overdue && (
+                                  <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-800">
+                                    Overdue
+                                  </span>
+                                )}
+                                {task.status !== 'pending' && (
+                                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">
+                                    {task.status}
+                                  </span>
+                                )}
+                              </div>
+                              {task.details && (
+                                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">
+                                  {task.details}
+                                </p>
+                              )}
+                              <p className="mt-2 text-sm text-slate-500">
+                                Due {formatDate(task.due_at)}
+                              </p>
+                            </div>
+                            {canEdit && task.status === 'pending' && (
+                              <div className="flex flex-wrap items-end gap-2">
+                                <label className="block">
+                                  <span className="field-label">New due time</span>
+                                  <input
+                                    className="field-input"
+                                    type="datetime-local"
+                                    aria-label={`New due time for ${task.title}`}
+                                    value={taskDueChanges[task.id] ?? singaporeDateAtNine()}
+                                    onChange={(event) =>
+                                      setTaskDueChanges((values) => ({
+                                        ...values,
+                                        [task.id]: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                </label>
+                                <button
+                                  className="button-secondary"
+                                  disabled={Boolean(busy) || !taskDueChanges[task.id]}
+                                  onClick={() =>
+                                    void runAction(`tasks/${task.id}/reschedule`, {
+                                      due_at: singaporeInputToIso(taskDueChanges[task.id] ?? ''),
+                                    })
+                                  }
+                                >
+                                  Reschedule
+                                </button>
+                                <button
+                                  className="button-primary"
+                                  disabled={Boolean(busy)}
+                                  onClick={() => void runAction(`tasks/${task.id}/complete`, {})}
+                                >
+                                  Complete
+                                </button>
+                                <button
+                                  className="button-secondary"
+                                  disabled={Boolean(busy)}
+                                  onClick={() => void runAction(`tasks/${task.id}/cancel`, {})}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 text-sm text-slate-500">No follow-ups scheduled.</p>
+                  )}
+                  {canEdit && isOpen && (
+                    <form
+                      className="mt-5 space-y-4 border-t border-slate-100 pt-5"
+                      onSubmit={(event: FormEvent) => {
+                        event.preventDefault();
+                        void runAction('tasks', {
+                          title: taskTitle.trim(),
+                          details: taskDetails.trim(),
+                          due_at: singaporeInputToIso(taskDue),
+                        });
+                      }}
+                    >
+                      <h3 className="font-semibold">Schedule a follow-up</h3>
+                      <Field label="Task">
+                        <input
+                          className="field-input"
+                          maxLength={120}
+                          required
+                          value={taskTitle}
+                          onChange={(event) => setTaskTitle(event.target.value)}
+                          placeholder="Call customer about installation dates"
+                        />
+                      </Field>
+                      <Field label="Due date and time (Singapore time)">
+                        <input
+                          className="field-input"
+                          type="datetime-local"
+                          required
+                          value={taskDue}
+                          onChange={(event) => setTaskDue(event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Details (optional)">
+                        <textarea
+                          className="field-input min-h-20"
+                          maxLength={500}
+                          value={taskDetails}
+                          onChange={(event) => setTaskDetails(event.target.value)}
+                          placeholder="Anything to prepare before following up"
+                        />
+                      </Field>
+                      <button
+                        className="button-primary"
+                        disabled={Boolean(busy) || !taskTitle.trim()}
+                      >
+                        {busy === 'tasks' ? 'Scheduling…' : 'Schedule follow-up'}
+                      </button>
+                    </form>
+                  )}
+                </section>
 
                 {canEdit && (
                   <section className="panel">

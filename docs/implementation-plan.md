@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: Milestones 1–3 are complete. PostgreSQL-backed tests and local browser verification for Milestone 3 are recorded in `milestone-3.md`.
+Status: Milestones 1–4 are implemented. Milestone 4 focused checks and local browser verification are recorded in `milestone-4.md`.
 
 ## Goal and constraints
 
@@ -111,14 +111,15 @@ Learning checkpoint: explain why frontend permissions are presentation only, and
 
 ### Milestone 4 — follow-up tasks
 
-- Add task creation, rescheduling, completion, and cancellation to lead detail and a minimal task list.
-- Store aware UTC timestamps; display and accept due times in Asia/Singapore.
-- Compute overdue from open status and due time compared with server time. No timer job is needed to mark a task overdue.
-- Follow lead ownership when assigning tasks; transfer open tasks on reassignment.
-- Cancel open tasks on lead closure/archive with a recorded reason. Preview that consequence in the UI.
-- Reopening/restoring does not silently revive cancelled tasks; staff schedule the next action explicitly.
+- Add task creation, rescheduling, completion, and cancellation to lead detail and a team task list.
+- Store timezone-aware instants; accept and display due times in Asia/Singapore.
+- Compute overdue from pending status and due time compared with server time. No timer job is needed to mark a task overdue.
+- Task ownership follows the lead owner, so admin reassignment immediately changes the responsible staff shown in task views.
+- Cancel open tasks transactionally when a lead becomes Won or Lost; show this consequence before the stage action and record the count in activity history.
+- Reopening does not silently revive cancelled tasks; staff schedule the next action explicitly.
+- Use lead version checks and activity action keys for stale-update protection and safe retry.
 
-Acceptance checks: due-time boundaries, UTC conversion, future-time validation, completion/cancellation exclusion, reassignment, and closure behavior pass focused tests. Duplicate completion produces no repeated business effect.
+Acceptance checks: timezone-aware due-time validation, owner/admin authorization, schedule/reschedule/complete/cancel, overdue filtering, safe action retry, and closure cancellation are covered by focused API tests. Browser walkthrough verifies task creation from a lead, task-list status filters, and updating a task.
 
 Learning checkpoint: explain why overdue is a computed condition rather than a stored status requiring scheduled updates.
 

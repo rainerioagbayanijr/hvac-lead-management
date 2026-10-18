@@ -199,3 +199,51 @@ class ActivityEvent(models.Model):
                 name="activity_action_fingerprint_valid",
             ),
         ]
+
+
+class FollowUpTask(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        COMPLETED = "completed", "Completed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="tasks")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_followups"
+    )
+    title = models.CharField(max_length=120)
+    details = models.CharField(max_length=500, blank=True, default="")
+    due_at = models.DateTimeField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["due_at", "id"]
+        indexes = [
+            models.Index(fields=["status", "due_at"], name="task_status_due_idx"),
+            models.Index(fields=["lead", "status", "due_at"], name="task_lead_status_due_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(title__regex=r"\S"), name="task_title_not_blank"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status="pending", completed_at__isnull=True, cancelled_at__isnull=True)
+                    | models.Q(
+                        status="completed", completed_at__isnull=False, cancelled_at__isnull=True
+                    )
+                    | models.Q(
+                        status="cancelled", completed_at__isnull=True, cancelled_at__isnull=False
+                    )
+                ),
+                name="task_status_timestamps_match",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.title} — {self.lead.name}"
