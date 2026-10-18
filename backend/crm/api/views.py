@@ -1,5 +1,8 @@
+import csv
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
@@ -10,11 +13,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from crm.metrics import dashboard_metrics
 from crm.models import FollowUpTask, Lead
+from crm.queries import filtered_leads
 from crm.services import create_inquiry
 from crm.tasks import cancel_task, complete_task, reschedule_task, schedule_task
 from crm.workflow import (
     add_note,
+    archive_lead,
     assign_lead,
     change_stage,
     claim_lead,
@@ -30,6 +36,7 @@ from .serializers import (
     ContactSerializer,
     FollowUpTaskSerializer,
     InquirySerializer,
+    LeadActionSerializer,
     LeadDetailSerializer,
     LeadListSerializer,
     ManualLeadSerializer,
@@ -50,6 +57,14 @@ class InquiryView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        if settings.DEMO_MODE:
+            return Response(
+                {
+                    "code": "demo_read_only",
+                    "message": "Public inquiry intake is disabled in the synthetic-data demo.",
+                },
+                status=403,
+            )
         consume_limit("inquiry_ip", client_ip(request), settings.PUBLIC_INQUIRIES_PER_HOUR, 3600)
         serializer = InquirySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -59,7 +74,9 @@ class InquiryView(APIView):
 
 class LeadListView(generics.ListAPIView):
     serializer_class = LeadListSerializer
-    queryset = Lead.objects.select_related("owner").prefetch_related("tasks").all()
+
+    def get_queryset(self):
+        return filtered_leads(self.request.query_params, self.request.user)
 
     def post(self, request):
         serializer = ManualLeadSerializer(data=request.data)
@@ -71,11 +88,97 @@ class LeadListView(generics.ListAPIView):
         )
 
 
+def export_safe_cell(value):
+    text = "" if value is None else str(value)
+    first = text.lstrip(" \t\r\n")[:1]
+    return f"'{text}" if first in {"=", "+", "-", "@"} else text
+
+
+class LeadExportView(APIView):
+    def get(self, request):
+        if request.user.role != User.Role.ADMIN:
+            raise PermissionDenied("Only an admin can export customer inquiries.")
+        leads = filtered_leads(request.query_params, request.user)
+        if leads.count() > 10000:
+            raise ValidationError(
+                {"export": ["Narrow the filters to export 10,000 leads or fewer."]}
+            )
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="service-inquiries.csv"'
+        writer = csv.writer(response)
+        writer.writerow(
+            [
+                "Reference",
+                "Customer",
+                "Phone",
+                "Email",
+                "Location",
+                "Service",
+                "Source",
+                "Stage",
+                "Owner",
+                "Received at",
+                "First contact at",
+                "Quote SGD",
+            ]
+        )
+        for lead in leads[:10000]:
+            writer.writerow(
+                [
+                    export_safe_cell(lead.pk),
+                    export_safe_cell(lead.name),
+                    export_safe_cell(lead.phone),
+                    export_safe_cell(lead.email),
+                    export_safe_cell(lead.location),
+                    export_safe_cell(lead.get_service_type_display()),
+                    export_safe_cell(lead.source),
+                    export_safe_cell(lead.get_stage_display()),
+                    export_safe_cell(lead.owner.display_name if lead.owner_id else "Unassigned"),
+                    export_safe_cell(lead.received_at.isoformat()),
+                    export_safe_cell(
+                        lead.first_contact_at.isoformat() if lead.first_contact_at else ""
+                    ),
+                    export_safe_cell(lead.quote_amount),
+                ]
+            )
+        response["Cache-Control"] = "no-store"
+        return response
+
+
 class LeadDetailView(generics.RetrieveAPIView):
     serializer_class = LeadDetailSerializer
-    queryset = (
-        Lead.objects.select_related("owner").prefetch_related("activity__actor", "tasks").all()
-    )
+
+    def get_queryset(self):
+        queryset = Lead.objects.select_related("owner").prefetch_related("activity__actor", "tasks")
+        if self.request.user.role != User.Role.ADMIN:
+            queryset = queryset.filter(archived_at__isnull=True)
+        return queryset
+
+
+class ArchiveLeadView(APIView):
+    restore = False
+
+    def post(self, request, pk):
+        serializer = LeadActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        lead = archive_lead(
+            pk,
+            request.user,
+            values["action_key"],
+            values["expected_version"],
+            restore=self.restore,
+        )
+        lead = (
+            Lead.objects.select_related("owner")
+            .prefetch_related("activity__actor", "tasks")
+            .get(pk=lead.pk)
+        )
+        return Response(LeadDetailSerializer(lead, context={"request": request}).data)
+
+
+class RestoreLeadView(ArchiveLeadView):
+    restore = True
 
 
 class TaskListView(generics.ListAPIView):
@@ -113,6 +216,11 @@ class TeamView(APIView):
                 for user in users
             ]
         )
+
+
+class DashboardView(APIView):
+    def get(self, request):
+        return Response(dashboard_metrics())
 
 
 class LeadActionView(APIView):

@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError
 
 from config.api import Conflict
+from integrations.services import enqueue_inquiry_notification
 
 from .models import ActivityEvent, Lead
 
@@ -38,6 +39,7 @@ def create_inquiry(values):
                 lead=lead,
                 metadata={"source": "website", "privacy_notice_version": "1"},
             )
+            enqueue_inquiry_notification(lead)
     except ModelValidationError as exc:
         raise ValidationError(exc.message_dict) from exc
     except IntegrityError:

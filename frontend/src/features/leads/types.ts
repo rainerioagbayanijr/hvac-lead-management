@@ -10,6 +10,7 @@ export type Lead = {
   owner_name: string | null;
   owner_id: number | null;
   source: string;
+  archived_at: string | null;
   received_at: string;
 };
 export type LeadDetail = Lead & {

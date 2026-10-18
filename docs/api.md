@@ -1,4 +1,4 @@
-# API contract — Milestone 4
+# API contract — current implementation
 
 All application routes below use the prefix `/api/v1/`. Responses are JSON. Protected endpoints use Django sessions; application roles do not grant anonymous access.
 
@@ -10,8 +10,12 @@ All application routes below use the prefix `/api/v1/`. Responses are JSON. Prot
 | POST | `auth/logout/` | Authenticated, explicit CSRF | Invalidate the session |
 | POST | `inquiries/` | Public, explicit CSRF/rate limit | Store/replay one service inquiry |
 | GET | `leads/` | Authenticated | Paginated team lead summaries |
+| GET | `dashboard/` | Authenticated | Pipeline, response, follow-up, quote, and cohort metrics |
 | POST | `leads/` | Authenticated staff/admin | Add a manually received inquiry |
+| GET | `leads/export.csv` | Admin role | Export current lead filters to formula-safe CSV, up to 10,000 rows |
 | GET | `leads/{uuid}/` | Authenticated | Contact/service details and creation history |
+| POST | `leads/{uuid}/archive/` | Admin role | Archive and cancel pending follow-ups |
+| POST | `leads/{uuid}/restore/` | Admin role | Restore lead without reviving cancelled follow-ups |
 | POST | `leads/{uuid}/claim/` | Authenticated staff/admin | Claim an unassigned active lead for self |
 | POST | `leads/{uuid}/assignment/` | Admin role | Assign, reassign, or unassign a lead |
 | POST | `leads/{uuid}/contact/` | Lead owner or admin | Record customer contact and first response |
@@ -25,6 +29,11 @@ All application routes below use the prefix `/api/v1/`. Responses are JSON. Prot
 | POST | `leads/{uuid}/tasks/{task_uuid}/cancel/` | Lead owner or admin | Cancel a pending task |
 | GET | `team/` | Admin role | List active users for assignment |
 | GET/HEAD | `health/` | Public | Minimal database-aware readiness |
+| GET | `public-config/` | Public | Return whether public demo intake is disabled |
+| GET | `integrations/status/` | Admin role | Read adapter, worker freshness, and outcome counts |
+| GET | `integrations/executions/` | Admin role | Paginated alert execution and attempt history |
+| POST | `integrations/executions/{uuid}/retry/` | Admin role | Queue a safe retry within the idempotency window |
+| POST | `integrations/resend/webhook/` | Resend signature | Verify, deduplicate, and record a delivery event |
 
 The readiness alias `/health/` exists outside the prefix for hosting. Its response is `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, with no database details.
 
@@ -51,7 +60,7 @@ Invalid and inactive credentials use the same generic response. SessionAuthentic
 
 ## Read responses
 
-Lists return `count`, `next`, `previous`, and `results`, with 25 records per page and stable descending receipt-time/UUID ordering. Use `?page=2`. Search/filter controls and configurable page size are later work.
+Lead lists return `count`, `next`, `previous`, and `results`, with 25 records per page and stable descending receipt-time/UUID ordering. Use `?page=2`. Filters are `q`, `stage`, `source`, `service`, `owner`, `due`, and admin-only `archived=true`; staff may select `owner=mine` or `owner=unassigned`, not another user's numeric ID. Invalid choices return a field validation response.
 
 Summaries include ID, customer name, contact methods, service/stage labels, owner name and ID, source, and receipt time. Details additionally include location, requirements, first-contact/quote/closure fields, version, and readable activity summaries. Submission/action keys, fingerprints, and normalized-phone internals are never returned.
 
@@ -69,6 +78,10 @@ Every action POST includes `action_key` (a client-generated UUID) and `expected_
 - Task list: defaults to pending tasks; filter with `status=pending|completed|cancelled` and `due=all|today|overdue`. Overdue is calculated from pending state and current server time. Lead reassignment changes the responsible owner shown because the task follows its lead.
 - Closing Won or Lost cancels pending tasks within the same database transaction. Reopening does not revive them; create a new follow-up explicitly.
 - Manual `POST leads/`: name, at least one contact method, service type, source, and (when supplied) a time-zone-aware `received_at` are validated. The server uses its current time when `received_at` is omitted. A staff creator owns the new lead; an admin creator leaves it unassigned. Receipt times in the future are rejected.
+- Archive/restore: include the same `action_key` and `expected_version` used by lead workflow actions. Archive is admin-only, records history, and cancels pending tasks. Restore preserves the cancellation history.
+- Dashboard: returns current active pipeline counts, 30-day intake, awaiting-first-contact and overdue counts, active Quoted-stage value, response-time sample/denominator, and the mature 90-day win cohort. See [metric definitions](milestone-5.md).
+- CSV export: admin-only; accepts the same lead filters, excludes archived records unless `archived=true`, and rejects more than 10,000 rows. Formula-leading cells are prefixed to prevent spreadsheet execution.
+- Integration history: admin-only. Retry is accepted only for eligible temporary/timeout/rate-limit failures, fewer than five attempts, and before the safe provider idempotency window closes. Demo adapter is enforced server-side whenever `DEMO_MODE=true`.
 
 Staff can see all team leads but can mutate only assigned leads; they can self-claim unassigned active leads. Admin application roles can mutate and assign any lead. These checks are enforced by the API and services even if the interface is bypassed.
 
@@ -91,4 +104,4 @@ Unresolved Django routes may still use Django's non-JSON 404 response. The clien
 
 ## Abuse controls
 
-API body limit: 64 KiB. Inquiry attempts: 10 per fixed UTC hour/IP. Login attempts: 10 per fixed 15-minute window/account and 30 per window/IP. PostgreSQL locks serialize shared counters; subjects are hashed. Forwarded IP headers are ignored unless the immediate proxy is explicitly trusted. Counter pruning joins scheduled maintenance in the background-work milestone.
+API body limit: 64 KiB. Inquiry attempts: 10 per fixed UTC hour/IP. Login attempts: 10 per fixed 15-minute window/account and 30 per window/IP. PostgreSQL locks serialize shared counters; subjects are hashed. Forwarded IP headers are ignored unless the immediate proxy is explicitly trusted. Public intake also uses a honeypot, schema allowlist, CSRF, privacy acknowledgment, and submission-key idempotency. The scheduled work command processes only alert executions; rate-counter cleanup remains bounded by its retention behavior.

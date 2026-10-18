@@ -2,7 +2,7 @@
 
 A single-business lead and follow-up application for a small air-conditioning installation and maintenance company.
 
-**Current status: Milestone 4 complete — staff can schedule and manage follow-ups for leads.** Customers can submit inquiries; staff can claim or receive assignments, record contact, quotes and notes, move leads through sales stages, and schedule, reschedule, complete, or cancel follow-up tasks. Overdue work is highlighted, and closed leads cancel open tasks with an activity record. Dashboard metrics, email integration, hosted demo, and deployment remain planned.
+**Current status: application milestones 1–8 are implemented and verified locally.** The project includes customer intake, staff ownership and sales stages, follow-ups, pipeline and dashboard reporting, lead archive/export, a recorded email integration with safe retry, synthetic demo data, CI/browser workflows, and a Render deployment blueprint. The public hosted demo has not been provisioned; live Resend delivery has not been verified because provider credentials are not configured.
 
 ## Build progress
 
@@ -12,10 +12,10 @@ A single-business lead and follow-up application for a small air-conditioning in
 | 2. Accounts and inquiry intake | Complete | Public inquiry form, staff sessions, protected lead list/detail, validation, and duplicate protection |
 | 3. Lead ownership and sales workflow | Complete | Claim and assign leads, record contact and quotes, change stages, add notes, and show activity history |
 | 4. Follow-up tasks | Complete | Schedule, reschedule, complete, and cancel tasks; identify overdue work |
-| 5. Working interface and dashboard | Next | Search and filters, pipeline, responsive workflow screens, and business metrics |
-| 6. Reliable external integration | Todo | Simulated and live email adapters, recorded attempts, safe retry, and delivery events |
-| 7. Verification and hosted demo | Todo | Critical browser checks, synthetic demo data, deployment, backup restore, and rollback rehearsal |
-| 8. Portfolio packaging | Todo | Screenshots, architecture overview, walkthrough, and evidence-based case study |
+| 5. Working interface and dashboard | Complete | Search/filters, pipeline, metrics, archive/restore, and safe CSV export |
+| 6. Reliable external integration | Complete | Fake and Resend adapters, recorded attempts, retry leases, and signed/deduplicated webhooks |
+| 7. Verification and demo readiness | Complete locally | Synthetic accounts/data, guarded reset, four browser workflows, CI, and Render configuration; hosted rollout and restore rehearsal await an account |
+| 8. Portfolio packaging | Complete as source assets | Architecture, decisions, setup, walkthrough script, deployment guide, and evidence-based case-study draft |
 
 Update this table and the current-status paragraph when a milestone is completed. The detailed scope, estimates, dependencies, and acceptance checks are in the [implementation plan](docs/implementation-plan.md).
 
@@ -29,12 +29,17 @@ Update this table and the current-status paragraph when a milestone is completed
 - Lets a lead owner or admin schedule, reschedule, complete, and cancel follow-up tasks; task changes appear in activity history.
 - Shows open, completed, and cancelled follow-ups; overdue status is calculated from the due time and current time.
 - Cancels open follow-ups when a lead is marked Won or Lost and records the cancellation count in lead history.
+- Searches and filters the team’s leads; groups the pipeline by stage and shows response, quote, win, and overdue follow-up metrics.
+- Lets admins archive and restore leads, and export up to 10,000 filtered active/archived leads to formula-safe CSV.
+- Queues one internal email alert per accepted public inquiry and records provider attempts, delivery webhooks, failures, and safe retries.
+- Uses a fake-only mode for the public synthetic demo; email is never sent in demo mode.
+- Seeds and resets synthetic leads, follow-ups, accounts, and simulated email history with guarded management commands.
 - Protects staff screens and API data with Django sessions and CSRF checks.
 - Validates requests, limits repeated public requests, and reports service health.
 
-The current build does not send automatic reminders, show pipeline metrics, or send integration alerts. Calls, messages, and quotes remain manual.
+The application does not make calls, send customer marketing messages, or generate quotes; staff perform those actions manually. Live Resend delivery and a hosted public demo still require account setup.
 
-Milestone 3's synthetic browser walkthrough is in [milestone-3-workflow.png](docs/screenshots/milestone-3-workflow.png). See the [Milestone 3 build and verification notes](docs/milestone-3.md).
+The [deployment guide](docs/deployment.md), [architecture](docs/architecture.md), [two-minute walkthrough script](docs/walkthrough.md), and [business case study](docs/case-study.md) describe the current implementation and its verification limits.
 
 ## Local stack
 
@@ -101,7 +106,7 @@ From the repository root:
 ```powershell
 .\.venv\Scripts\python.exe backend\manage.py check
 .\.venv\Scripts\python.exe backend\manage.py makemigrations --check --dry-run
-.\.venv\Scripts\python.exe backend\manage.py test accounts crm operations config.tests
+.\.venv\Scripts\python.exe backend\manage.py test accounts crm integrations operations config.tests
 .\.venv\Scripts\python.exe -m ruff check backend scripts
 .\.venv\Scripts\python.exe -m ruff format backend scripts --check
 Set-Location frontend
@@ -111,7 +116,7 @@ npm.cmd run format:check
 
 The test command names the backend apps explicitly because running discovery from the repository root can otherwise report zero tests. Tests create and remove `test_lead_followup`; they do not use or erase the ordinary development database. Keep the local database running during these checks.
 
-`npm run build` runs strict TypeScript checking before producing compiled frontend assets. It verifies buildability, not complete browser workflows. See [the testing guide](docs/testing.md) for what each check proves and how to exercise failure/recovery.
+`npm run build` runs strict TypeScript checking before producing compiled frontend assets. CI also runs four Playwright browser journeys against a throwaway PostgreSQL database. To run them locally, seed only a synthetic database with `DEMO_MODE=true` and configured `DEMO_*_PASSWORD` values, then set `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD`, `E2E_STAFF_USERNAME`, and `E2E_STAFF_PASSWORD` before `npm run test:e2e` from `frontend`. The Playwright server uses ports 8001 and 5174 by default. See [the testing guide](docs/testing.md) for failure cases and what each check proves.
 
 ## Where to look
 
@@ -119,13 +124,16 @@ The test command names the backend apps explicitly because running discovery fro
 - `backend/accounts/`: users, CSRF-protected sessions, and local account setup.
 - `backend/crm/`: lead/history models, transactional public intake, and protected read APIs.
 - `backend/crm/tasks.py`: transactional follow-up task rules; task API endpoints are in `backend/crm/api/`.
+- `backend/integrations/`: fake/Resend adapters, durable attempts, leases, and verified webhook handling.
 - `frontend/src/features/tasks/`: team follow-up list; task creation and history are on each lead detail page.
-- `backend/operations/`: readiness and shared rate limits.
-- `frontend/src/app/`: application shell and route protection; `features/` contains inquiry, login, and lead screens.
+- `backend/operations/`: readiness, request limits, guarded demo seed/reset, and operational commands.
+- `frontend/src/app/`: application shell and route protection; `features/` contains dashboard, inquiry, login, lead, integration, and task screens.
+- `deploy/`: multi-stage Docker image and Render demo Blueprint.
+- `frontend/e2e/`: critical customer/staff/admin browser workflows.
 - `compose.yaml`: local PostgreSQL only.
 - [Build plan](docs/implementation-plan.md), [architecture](docs/architecture.md), [API contract](docs/api.md), and [technical decisions](docs/decisions.md).
 
-Other skeleton files remain empty until their milestone needs them. Deployment scripts and production asset hosting are not implemented yet; no infrastructure has been deployed.
+All source milestones are implemented. Hosted demo provisioning, live Resend verification, hosted backup restoration, and a recorded walkthrough remain account-dependent work; no cloud resources have been created. See the [deployment guide](docs/deployment.md).
 
 ## Troubleshooting
 
@@ -138,14 +146,14 @@ Other skeleton files remain empty until their milestone needs them. Deployment s
 
 ## Test the working flow
 
-1. Submit a fictional inquiry. Name, service, one contact method, and privacy acknowledgement are required.
-2. Record the confirmation reference. No email is sent in this milestone.
-3. Log in using a local account and open the saved inquiry.
-4. Refresh the page to check the session persists; log out to check private pages redirect to login.
-5. If submission cannot be confirmed, retry the same inquiry. The screen locks its details and reuses the submission key to avoid accidental duplicates. Only the opaque key is retained in session storage; customer fields are kept in component memory.
+1. Submit a fictional inquiry. Name, service, one contact method, and privacy acknowledgment are required.
+2. Sign in as staff/admin, claim or assign the inquiry, record contact or a quote, add an internal note, and schedule a follow-up.
+3. Open the dashboard and pipeline; use list filters to find the lead and review overdue work.
+4. Open integration history as admin. The default local adapter is fake; no external email is sent unless Resend is explicitly configured.
+5. If a response is lost, retry the same inquiry. The server's submission key prevents a duplicate lead and alert execution.
 
-See [Milestone 2](docs/milestone-2.md), [Milestone 3](docs/milestone-3.md), and [Milestone 4](docs/milestone-4.md) testing notes for results and limits.
+The hosted demo uses synthetic records and disables public intake. Live provider delivery and business outcomes have not been verified. See [Milestone 5](docs/milestone-5.md), [Milestone 6](docs/milestone-6.md), [Milestone 7](docs/milestone-7.md), and [Milestone 8](docs/milestone-8.md) for evidence and limits.
 
-## Next milestone
+## Remaining account setup
 
-Milestone 5: improve lead search and filters, add a simple pipeline view, and show response and follow-up metrics. See the [Milestone 5 acceptance checks](docs/implementation-plan.md#milestone-5--working-interface-and-dashboard).
+Create the Render workspace, review the current estimated costs, provide demo credentials as provider secrets, and apply `deploy/render.yaml`. Then complete hosted health/browser checks, a restore rehearsal, and the walkthrough recording. Configure Resend only in a separate business environment. The [deployment guide](docs/deployment.md) gives the checklist and rollback steps.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Notice } from '../../components/ui/Notice';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { formatDate, singaporeDateAtNine, singaporeInputToIso } from '../../lib/dates';
@@ -15,9 +15,13 @@ type TaskPage = {
 
 export function TaskListPage() {
   const { expire } = useAuth();
-  const [status, setStatus] = useState('pending');
-  const [due, setDue] = useState('all');
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [status, setStatus] = useState(searchParams.get('status') ?? 'pending');
+  const [due, setDue] = useState(searchParams.get('due') ?? 'all');
+  const [page, setPage] = useState(() => {
+    const initialPage = Number(searchParams.get('page') ?? 1);
+    return Number.isInteger(initialPage) && initialPage > 0 ? initialPage : 1;
+  });
   const [data, setData] = useState<TaskPage | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -25,6 +29,14 @@ export function TaskListPage() {
   const [revision, setRevision] = useState(0);
   const [rescheduleValues, setRescheduleValues] = useState<Record<string, string>>({});
   const retryKeys = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set('status', status);
+    params.set('due', due);
+    if (page > 1) params.set('page', String(page));
+    setSearchParams(params, { replace: true });
+  }, [status, due, page, setSearchParams]);
 
   useEffect(() => {
     const controller = new AbortController();

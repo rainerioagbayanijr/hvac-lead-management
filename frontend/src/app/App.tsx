@@ -7,6 +7,9 @@ import { LeadListPage } from '../features/leads/LeadListPage';
 import { LeadDetailPage } from '../features/leads/LeadDetailPage';
 import { NewLeadPage } from '../features/leads/NewLeadPage';
 import { TaskListPage } from '../features/tasks/TaskListPage';
+import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { PipelinePage } from '../features/leads/PipelinePage';
+import { IntegrationPage } from '../features/integrations/IntegrationPage';
 import { Notice } from '../components/ui/Notice';
 import { AppShell } from './AppShell';
 
@@ -36,6 +39,30 @@ export function App() {
           <Routes>
             <Route path="/" element={<InquiryPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/app/dashboard"
+              element={
+                <Protected>
+                  <DashboardPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/app/pipeline"
+              element={
+                <Protected>
+                  <PipelinePage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/app/integrations"
+              element={
+                <Protected>
+                  <IntegrationPage />
+                </Protected>
+              }
+            />
             <Route
               path="/app/leads"
               element={

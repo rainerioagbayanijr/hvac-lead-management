@@ -6,3 +6,5 @@ python-dotenv==1.2.4
 asgiref==3.12.1
 sqlparse==0.6.0
 tzdata==2026.5
+gunicorn==23.0.0
+whitenoise==6.9.0

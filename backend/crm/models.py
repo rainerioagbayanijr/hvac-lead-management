@@ -42,6 +42,8 @@ class Lead(models.Model):
     quote_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     loss_reason = models.CharField(max_length=500, blank=True, default="")
     closed_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    demo_seeded = models.BooleanField(default=False, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -69,6 +71,7 @@ class Lead(models.Model):
             models.Index(fields=["stage", "received_at"], name="lead_stage_received_idx"),
             models.Index(fields=["owner", "stage"], name="lead_owner_stage_idx"),
             models.Index(fields=["source"], name="lead_source_idx"),
+            models.Index(fields=["archived_at", "received_at"], name="lead_archive_received_idx"),
         ]
         constraints = [
             models.CheckConstraint(

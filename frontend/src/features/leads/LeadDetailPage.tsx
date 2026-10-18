@@ -115,7 +115,10 @@ export function LeadDetailPage() {
   }
 
   const canEdit = Boolean(
-    lead && session?.authenticated && (isAdmin || lead.owner_id === session.user.id),
+    lead &&
+    !lead.archived_at &&
+    session?.authenticated &&
+    (isAdmin || lead.owner_id === session.user.id),
   );
   const isOpen = Boolean(lead && !['won', 'lost'].includes(lead.stage));
   const actionButton = (
@@ -157,10 +160,30 @@ export function LeadDetailPage() {
                   Received {formatDate(lead.received_at)} · {lead.source}
                 </p>
               </div>
-              <span className="rounded-full bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800">
-                {lead.stage_label}
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                {isAdmin && (
+                  <button
+                    className="button-secondary"
+                    disabled={Boolean(busy)}
+                    onClick={() => void runAction(lead.archived_at ? 'restore' : 'archive', {})}
+                  >
+                    {busy === (lead.archived_at ? 'restore' : 'archive')
+                      ? 'Saving…'
+                      : lead.archived_at
+                        ? 'Restore inquiry'
+                        : 'Archive inquiry'}
+                  </button>
+                )}
+                <span className="rounded-full bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800">
+                  {lead.stage_label}
+                </span>
+              </div>
             </div>
+            {lead.archived_at && (
+              <div className="mt-5">
+                <Notice>This inquiry is archived. Restore it before making changes.</Notice>
+              </div>
+            )}
 
             <div className="mt-7 grid items-start gap-6 lg:grid-cols-[1.45fr_1fr]">
               <div className="space-y-6">
@@ -207,8 +230,11 @@ export function LeadDetailPage() {
                   <p className="mt-2 text-sm text-slate-600">
                     Current owner: <strong>{lead.owner_name || 'Unassigned'}</strong>
                   </p>
-                  {!lead.owner_id && isOpen && actionButton('Claim this inquiry', 'claim', {})}
-                  {isAdmin && (
+                  {!lead.archived_at &&
+                    !lead.owner_id &&
+                    isOpen &&
+                    actionButton('Claim this inquiry', 'claim', {})}
+                  {isAdmin && !lead.archived_at && (
                     <div className="mt-5 flex flex-wrap items-end gap-3">
                       <Field label="Assign to">
                         <select
@@ -381,7 +407,7 @@ export function LeadDetailPage() {
                   </>
                 )}
 
-                {isAdmin && !isOpen && (
+                {isAdmin && !lead.archived_at && !isOpen && (
                   <section className="panel">
                     <h2 className="text-lg font-semibold">Reopen lead</h2>
                     <p className="mt-2 text-sm text-slate-600">

@@ -1,4 +1,4 @@
-"""Fail-closed production settings; hosting/static release work is milestone 7."""
+"""Fail-closed settings for the single-origin production deployment."""
 
 import os
 

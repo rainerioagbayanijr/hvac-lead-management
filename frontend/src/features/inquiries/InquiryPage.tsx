@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Notice } from '../../components/ui/Notice';
 import { api, ApiError, errorMessage } from '../../lib/api';
@@ -37,6 +37,7 @@ function submissionKey() {
 }
 
 export function InquiryPage() {
+  const [demoMode, setDemoMode] = useState<boolean | null>(null);
   const [fields, setFields] = useState<Fields>(initialFields);
   const [key, setKey] = useState(submissionKey);
   const [busy, setBusy] = useState(false);
@@ -46,6 +47,17 @@ export function InquiryPage() {
   const [conflict, setConflict] = useState(false);
   const [reference, setReference] = useState('');
   const busyRef = useRef(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    api<{ demo_mode: boolean }>('/public-config/', { signal: controller.signal })
+      .then((config) => {
+        if (!controller.signal.aborted) setDemoMode(config.demo_mode);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setDemoMode(false);
+      });
+    return () => controller.abort();
+  }, []);
   function update(name: keyof Fields, value: string | boolean) {
     setFields((current) => ({ ...current, [name]: value }));
   }
@@ -117,6 +129,22 @@ export function InquiryPage() {
     );
   }
 
+  if (demoMode === null) return <Notice>Preparing service inquiry form…</Notice>;
+  if (demoMode)
+    return (
+      <div className="mx-auto max-w-2xl">
+        <p className="eyebrow">Portfolio demonstration</p>
+        <h1 className="page-title">Synthetic customer workspace</h1>
+        <p className="mt-4 leading-7 text-slate-600">
+          This read-only public demo uses fictional customer records. Public inquiry intake is
+          disabled here. Sign in with the demo account to explore lead ownership, follow-ups, and
+          reporting.
+        </p>
+        <Link className="button-primary mt-6" to="/login">
+          Open demo workspace
+        </Link>
+      </div>
+    );
   if (reference)
     return (
       <div className="mx-auto max-w-2xl panel">

@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+.local-accounts.md
+.ruff_cache
+__pycache__
+**/__pycache__
+**/*.py[cod]
+**/node_modules
+**/dist
+backend/staticfiles
+frontend/.verify-m5
+test-results
+playwright-report

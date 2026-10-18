@@ -52,6 +52,8 @@ def _mutate(lead_id, actor, action_key, expected_version, kind, payload, change)
 
         if lead.version != expected_version:
             raise Conflict("This lead changed. Refresh it and try again.", code="conflict")
+        if lead.archived_at and kind not in {"archive", "restore"}:
+            raise ValidationError({"lead": ["Restore this lead before making changes."]})
         can_claim = kind == "claim" and actor.role in [User.Role.STAFF, User.Role.ADMIN]
         if not _can_change(actor, lead) and not can_claim:
             raise PermissionDenied("You can change only leads assigned to you.")
@@ -253,6 +255,33 @@ def add_note(lead_id, actor, action_key, expected_version, body):
         return "note_added", {"body": text}, []
 
     return _mutate(lead_id, actor, action_key, expected_version, "note", {"body": text}, change)
+
+
+def archive_lead(lead_id, actor, action_key, expected_version, restore=False):
+    if not _is_admin(actor):
+        raise PermissionDenied("Only an admin can archive or restore leads.")
+
+    def change(lead):
+        now = timezone.now()
+        if restore:
+            if lead.archived_at is None:
+                raise ValidationError({"lead": ["This lead is already active."]})
+            lead.archived_at = None
+            return "lead_restored", {}, ["archived_at"]
+        if lead.archived_at is not None:
+            raise ValidationError({"lead": ["This lead is already archived."]})
+        lead.archived_at = now
+        cancelled_count = FollowUpTask.objects.filter(
+            lead=lead, status=FollowUpTask.Status.PENDING
+        ).update(
+            status=FollowUpTask.Status.CANCELLED,
+            cancelled_at=now,
+            updated_at=now,
+        )
+        return "lead_archived", {"cancelled_tasks": cancelled_count}, ["archived_at"]
+
+    kind = "restore" if restore else "archive"
+    return _mutate(lead_id, actor, action_key, expected_version, kind, {}, change)
 
 
 @transaction.atomic

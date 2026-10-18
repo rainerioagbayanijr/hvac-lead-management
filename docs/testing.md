@@ -1,4 +1,19 @@
-# Testing and learning guide — Milestone 1
+# Testing and learning guide — current build
+
+## Current verification record — 18 October 2026
+
+- 125 Django tests passed against PostgreSQL; migrations were applied to an isolated test database.
+- Django system checks and migration drift check passed; Ruff lint and formatting checks passed.
+- Frontend Prettier, strict TypeScript, and Vite production build passed.
+- All four Playwright workflows passed against synthetic local data: inquiry-to-assignment/task, overdue task reschedule/completion, staff edit denial, and admin simulated-email retry.
+- The production Docker image built; a container smoke test verified PostgreSQL-backed `/health/`, the SPA root, the hashed JavaScript asset, and a direct `/app/leads` route (all returned HTTP 200).
+- Render and Resend accounts are not connected. The Docker/Render deployment has not been provisioned, external delivery has not been tested, and a hosted backup restore has not been rehearsed.
+
+Run the backend test suite, Django checks, Ruff, and frontend formatting/build using the commands in the [README](../README.md). CI additionally runs the Playwright suite in `frontend/e2e/` against a fresh PostgreSQL service. Browser tests require the four `E2E_*` account variables; no external provider credential is used.
+
+## Historical foundation verification — 13 October 2026
+
+The remainder of this file records Milestone 1's initial foundation checks and lessons. It is not a status report for the current feature set.
 
 This file preserves the Milestone 1 verification record. For the current workflow, see [Milestone 3 testing](milestone-3.md) and [Milestone 2 testing](milestone-2.md). The current backend development port is 8001; the connection-card preview below has been replaced by the real inquiry form.
 

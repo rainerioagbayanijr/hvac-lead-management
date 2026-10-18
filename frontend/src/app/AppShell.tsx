@@ -48,12 +48,23 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             {auth.session?.authenticated ? (
               <>
+                <Link className="text-slate-600 hover:text-blue-700" to="/app/dashboard">
+                  Dashboard
+                </Link>
+                <Link className="text-slate-600 hover:text-blue-700" to="/app/pipeline">
+                  Pipeline
+                </Link>
                 <Link className="text-blue-700" to="/app/leads">
                   Leads
                 </Link>
                 <Link className="text-slate-600 hover:text-blue-700" to="/app/tasks">
                   Follow-ups
                 </Link>
+                {auth.session.user.role === 'admin' && (
+                  <Link className="text-slate-600 hover:text-blue-700" to="/app/integrations">
+                    Integrations
+                  </Link>
+                )}
                 <span className="text-slate-500">{auth.session.user.display_name}</span>
                 <button className="button-secondary" onClick={() => void logout()} disabled={busy}>
                   {busy ? 'Logging out…' : 'Log out'}

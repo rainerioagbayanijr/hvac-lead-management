@@ -1,48 +1,59 @@
-# Architecture — Milestone 3
+# Architecture — current implementation
 
 ```mermaid
-flowchart TD
-    Browser[Customer or staff browser] --> Vite[Vite on localhost:5173]
-    Vite --> React[React / TypeScript / Tailwind screens]
-    Vite -->|same-origin API proxy| Django[Django / DRF on localhost:8001]
-    Django --> Auth[Django session, role, and CSRF checks]
-    Django --> CRM[Inquiry and lead workflow services]
-    CRM -->|atomic writes and row locks| PG[(PostgreSQL 17)]
-    CRM -->|lead and activity event together| PG
-    Django -->|team options for admins| Auth
+flowchart LR
+  Customer[Customer browser] -->|HTTPS form| Edge[Render HTTPS edge]
+  Staff[Staff browser] -->|HTTPS session + CSRF| Edge
+  Edge --> SPA[Django shell + Vite-built React assets]
+  Edge --> API[Django + DRF API]
+  API --> Auth[Session, role, CSRF, rate-limit checks]
+  API --> CRM[CRM query and workflow services]
+  API --> Alerts[Integration API and webhook verifier]
+  CRM --> DB[(Private PostgreSQL)]
+  Alerts --> DB
+  API -->|committed execution| DB
+  Worker[Scheduled Django worker] -->|lease and claim| DB
+  Worker --> Adapter{Configured adapter}
+  Adapter -->|public demo: fake only| Fake[Deterministic fake adapter]
+  Adapter -->|business environment only| Resend[Resend API]
+  Resend -->|signed delivery webhook| API
 ```
 
 ## Responsibilities
 
-- React Router provides customer inquiry, login, lead list, lead detail, and manual-entry screens. UI checks decide which controls to show; they do not authorize a write.
-- Django sessions authenticate browser requests. The application role decides staff/admin actions, and CSRF protects every write. Django's separate technical admin flag controls access to Django admin.
-- Inquiry and workflow serializers validate submitted fields and reject unknown/privileged fields. The API views connect those validated requests to the workflow services.
-- CRM services own business rules. `workflow.py` locks one lead row, checks the expected version and role/owner, changes the lead, increments its version, and writes an activity event in one transaction.
-- PostgreSQL constraints protect valid stages, closure fields, quotes, and action-key uniqueness. Row locks serialize claims so simultaneous staff claims have one winner.
-- Each staff action has an idempotency key and a fingerprint of the actor and business fields. A repeated identical request returns the saved lead; changed content under the same key conflicts.
-- Activity history uses readable summaries in the API. Note bodies and loss reasons remain private to authenticated staff; public inquiry responses still reveal only the opaque reference.
-- PostgreSQL is also used for sessions and shared rate counters. No queue or Redis is needed for the current workflow. Scheduled work belongs to a later milestone.
+- **React and TypeScript** own form state, navigation, filters, and work-oriented display states. UI controls are not an authorization boundary.
+- **Django and DRF** authenticate via Django sessions and CSRF, validate API input, apply role/owner checks, and return a consistent API error shape.
+- **`crm/`** owns lead/task data and business rules: idempotent inquiry creation, owner workflows, task scheduling, archival, filtering, exports, and dashboard calculations. Views pass validated values into services; they do not replace those rules.
+- **`integrations/`** owns fake and Resend adapters, email execution/attempt rows, short worker leases, retry window, signed webhook verification, and provider event deduplication.
+- **`operations/`** owns request limits, health checks, synthetic seed/reset commands, and management-time safeguards.
+- **PostgreSQL** stores all business data, sessions, shared rate counters, activity history, integration execution state, and worker heartbeat. Row locks and unique constraints coordinate concurrent requests and retries.
+- **Render web service and cron jobs** provide the demo runtime. One origin avoids a separate CORS/cookie deployment. WhiteNoise serves Vite's content-hashed files. The cron jobs use PostgreSQL leases, so no broker or Redis is needed for this small workload.
 
-## Lead workflow
+## Inquiry to follow-up and alert
 
-Website intake creates a New, unassigned lead and its initial event together. Staff can also enter inquiries received by phone, email, WhatsApp, referral, or another source; the creator owns that entry. Admins assign or reassign leads to active team users. Staff can see all leads, claim unassigned active leads, and mutate only their assigned leads.
+1. The browser fetches CSRF and public configuration, validates required fields for usability, and submits an allowlisted inquiry with a stable submission UUID.
+2. Django applies public-mode guards, rate limiting, honeypot/schema validation, and normalized payload validation. A database transaction creates the lead, initial activity event, and exactly one pending alert execution. A repeat key with the same payload returns the existing reference; changed content under the same key conflicts.
+3. Staff sign in, see all active team leads, and claim an unassigned lead or ask an admin to assign it. The lead service locks the row, checks current version/role, and records the ownership event atomically.
+4. The owner records contact/stage changes, append-only notes, and dated follow-ups. Due times are timezone-aware instants; the UI displays Asia/Singapore. A task becomes overdue by comparing its pending state and due instant to current server time, not via a scheduled status rewrite.
+5. A worker claims due executions with `select_for_update(skip_locked=True)`, creates an attempt, and commits a short lease before making a network request. It does not hold a database transaction open over the network. The provider idempotency key is stable for that execution.
+6. The worker records accepted/failure/uncertain outcomes. A signed provider webhook is verified against the unmodified request body and deduplicated by provider event ID. Early and out-of-order receipts are reconciled by provider message ID.
 
-Recording customer contact writes the contact method, first-contact time (only if empty), and an activity event. A first contact on a New lead moves it to Contacted. Contact later than the first response remains in the history without changing the first-contact metric.
+## Failure behavior
 
-Contacted leads can receive a positive SGD quote and move to Quoted. Quoted leads can become Won. An open lead can become Lost only with a reason. Admins can reopen a closed lead; the prior close event remains in the append-only history. Calls, messages, and quotes are still performed manually.
+- **Duplicate public submission:** identical key and payload replays the receipt; altered payload returns conflict; only one alert execution is stored.
+- **Duplicate lead by contact method:** allowed, because a customer may ask about separate jobs. Staff can find likely duplicates by search; automatic fuzzy merging is intentionally out of scope.
+- **Network timeout:** the execution retains the same idempotency key and enters bounded retry when safe. Unknown outcomes that cannot be safely retried become Needs review.
+- **Provider failure:** retry temporary errors up to five attempts at bounded intervals; permanent delivery failures are visible but not automatically retried.
+- **Worker crash:** the lease expires; a later run reclaims it and records the prior attempt as uncertain. After the safe provider window/attempt limit, the execution is surfaced for review.
+- **Overdue work:** computed on read from pending + past-due; completing, cancelling, or rescheduling writes a versioned activity event.
+- **Archived lead:** admin-only archive records history, cancels pending tasks, and hides the lead from active staff lists. Restore does not resurrect cancelled work.
 
-## Concurrency and failures
+## Metrics
 
-All workflow mutation requests carry an expected lead version. If another request wins first, stale changes receive a conflict and the user must refresh. The client action key makes a retry safe after a lost response. Activity write failure rolls the lead change back, so no unrecorded mutation is committed.
+The API returns the generation timestamp, current active stage counts, 30-day intake count, open leads awaiting first contact, overdue pending tasks, current Quoted-stage value, first-response median/coverage, and a mature 90-day intake-cohort win rate. Response time is `first_contact_at - received_at`; the win denominator is leads received from 120 to 30 days before the generated timestamp. Exact exclusions and boundaries are in [Milestone 5 metric definitions](milestone-5.md). Quoted value is not revenue.
 
-The lost response case is handled before the version check when the same action key, actor, and payload already have an event. This avoids repeating contact notes or business effects. A reused key with changed payload is rejected.
+## Security, deployment, and growth boundary
 
-Public inquiry behavior remains transactional and idempotent on the original submission key. No external message is sent in Milestone 3.
+Staff can read team leads but edit only leads they own. Admin role controls assignment, archive/restore, export, and integration retry. Technical Django `is_staff`/`is_superuser` is distinct from the application role. Public demo mode forces fake delivery and blocks public intake in the backend.
 
-## Local and production operation
-
-PostgreSQL runs in one dedicated local Docker container and volume; only localhost port 55432 is published. Django and Vite run as ordinary local processes. Production settings do not read the local `.env` and require secure host/TLS configuration. Production will serve the compiled frontend and API from one origin.
-
-## Later work
-
-Milestone 4 adds follow-up tasks and overdue views. Milestone 5 adds pipeline reporting, filters, exports, and dashboard metrics. Milestone 6 records external email executions with bounded retries and verified webhooks. Hosted synthetic demo, backups, restore and release rollback remain Milestone 7.
+Production will serve the SPA shell, assets, and `/api/` on one secure origin. Render's Singapore region holds web/cron/DB together. A managed PostgreSQL database is the single source of truth; scheduled jobs use durable rows and leases. If volume later requires concurrent worker scale, queued asynchronous tasks, or tenant isolation, reassess broker and tenancy design separately. No multi-business tenancy or billing exists in this MVP.

@@ -6,6 +6,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from crm.models import ActivityEvent, Lead
+from integrations.models import EmailExecution
 
 
 def inquiry_payload(**overrides):
@@ -35,6 +36,7 @@ class InquiryApiTests(TestCase):
         self.assertEqual((lead.stage, lead.source, lead.owner), ("new", "website", None))
         self.assertEqual(lead.email, "person@example.test")
         self.assertEqual(lead.activity.count(), 1)
+        self.assertEqual(lead.email_executions.count(), 1)
         self.assertEqual(lead.activity.get().metadata["privacy_notice_version"], "1")
 
     def test_replay_returns_original_reference_with_no_extra_event(self):
@@ -45,6 +47,7 @@ class InquiryApiTests(TestCase):
         self.assertEqual(first.json(), replay.json())
         self.assertEqual(Lead.objects.count(), 1)
         self.assertEqual(ActivityEvent.objects.count(), 1)
+        self.assertEqual(EmailExecution.objects.count(), 1)
 
     def test_different_payload_under_same_key_is_conflict(self):
         values = inquiry_payload()
@@ -96,6 +99,14 @@ class InquiryApiTests(TestCase):
             with self.subTest(field=field):
                 self.assertEqual(self.post(inquiry_payload(**{field: value})).status_code, 400)
         self.assertFalse(Lead.objects.exists())
+
+    @override_settings(DEMO_MODE=True)
+    def test_synthetic_demo_rejects_real_public_inquiry_writes(self):
+        response = self.post(inquiry_payload())
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["code"], "demo_read_only")
+        self.assertEqual(Lead.objects.count(), 0)
+        self.assertEqual(EmailExecution.objects.count(), 0)
 
     def test_honeypot_is_rejected(self):
         self.assertEqual(

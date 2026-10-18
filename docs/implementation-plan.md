@@ -154,7 +154,7 @@ Acceptance checks: timeout followed by same-key retry; permanent failure; duplic
 
 Learning checkpoint: explain the difference between accepted, delivered, failed, and uncertain; identify where duplicate prevention has a time limit.
 
-### Milestone 7 — verification and hosted demo
+### Milestone 7 — verification and demo readiness
 
 - Run four Playwright scenarios: inquiry-to-follow-up, overdue task completion/rescheduling, staff permission denial, and simulated integration retry.
 - Use PostgreSQL for backend checks. Use deterministic clocks and fake network responses for scheduling/retry tests.
@@ -162,25 +162,25 @@ Learning checkpoint: explain the difference between accepted, delivered, failed,
 - Review authorization, secrets, cookies, CSRF, rate limits, logs, export safety, and production settings.
 - Implement synthetic seed data, restricted demo access, server-enforced simulated integration, and guarded daily reset at 00:00 Singapore time.
 - Populate deployment configuration only now. Build the React output into the Django release and exclude API/admin/webhook/health paths from SPA fallback routing.
-- Prepare one paid Render web service, paid PostgreSQL, and scheduled work, with separate demo and production configuration.
-- Verify health, cron freshness, session behavior, and the full demo flow after deployment.
-- Perform a backup restore rehearsal into a separate database. Pause and reconcile integrations before resuming work after recovery.
-- Document rollback to a prior application release and use backward-compatible migrations.
+- Prepare a Render Blueprint for the synthetic demo, paid PostgreSQL, HTTPS web hosting, worker cadence, guarded daily reset, and same-origin frontend/API.
+- Run health, session, and full demo flows locally and in CI. Hosted verification awaits provisioning the account-owned resources.
+- Document the backup restore rehearsal and release rollback steps; execute the restore only after a hosted database exists.
+- Keep live provider secrets and real business data out of the public demo environment.
 
-Acceptance checks: required checks pass; mobile and keyboard review complete; hosted demo contains only synthetic seed data; real sends are blocked in demo; reset is guarded from production; restore and rollback procedures are documented and exercised where applicable.
+Acceptance checks: required checks pass; hosted-ready configuration contains synthetic data only; real sends are blocked in demo; reset is guarded from production; restore and rollback procedures are documented. Provider provisioning and restore rehearsal remain an external setup task.
 
 Learning checkpoint: locate a failure using a request/execution ID, explain how to restore data, and explain why restoring a database can revive old pending alerts.
 
 ### Milestone 8 — portfolio packaging
 
 - Finish README with business problem, screenshots, setup, architecture, decisions, checks, limitations, and demo access.
-- Save the architecture diagram and brief explanation of the reliable integration flow.
-- Record a two-minute walkthrough of intake, ownership, follow-up, reporting, and failed-alert retry.
-- Write a business case study separating demonstrated technical behavior from proposed customer benefits.
+- Save the architecture diagram and two-minute walkthrough script for intake, ownership, follow-up, reporting, and failed-alert retry.
+- Record the walkthrough video after a shareable demo environment is available.
+- Draft a business case study separating demonstrated technical behavior from proposed customer benefits.
 - Measure synthetic-data performance and record the environment, dataset, and procedure.
 - Prepare a pilot measurement plan for actual response times, missed follow-ups, and conversion. Do not claim improvement without customer evidence.
 
-Acceptance checks: a reviewer can launch the project from instructions, navigate the demo, understand the main tradeoffs, and distinguish simulated results from live-provider verification and real customer outcomes.
+Acceptance checks: a reviewer can launch locally from instructions, understand the main tradeoffs, and distinguish simulated results from live-provider verification and real customer outcomes. Public hosted access and recorded video remain pending.
 
 ## Time and scope checkpoints
 
@@ -210,4 +210,4 @@ If credentials are unavailable, demonstrate the clearly labeled fake adapter and
 - Before accepting a milestone, explain its authorization, transaction boundaries, failure behavior, tests, and diagnostic trail.
 - No stretch work until core behavior and its verification are complete.
 
-Next implementation action: milestone 3, beginning with transactional lead claims/assignment and per-lead mutation permissions, followed by contact/stage actions and notes.
+Implementation status: source milestones 1–8 are complete. Hosted provider setup, public demo link, live Resend verification, backup restore rehearsal, and recorded walkthrough are the remaining account-dependent portfolio tasks. See [deployment readiness](deployment.md) and [walkthrough script](walkthrough.md).

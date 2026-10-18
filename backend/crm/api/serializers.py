@@ -64,6 +64,7 @@ class LeadListSerializer(serializers.ModelSerializer):
             "owner_name",
             "owner_id",
             "source",
+            "archived_at",
             "received_at",
         ]
 
@@ -113,6 +114,12 @@ class ActivitySerializer(serializers.ModelSerializer):
             return f"Moved from {before.title()} to {after.title()}."
         if event.event_type == "lead_reopened":
             return f"Reopened at {data.get('stage_to', '').title()}."
+        if event.event_type == "lead_archived":
+            if data.get("cancelled_tasks"):
+                return f"Lead archived; {data['cancelled_tasks']} open follow-up(s) cancelled."
+            return "Lead archived by an admin."
+        if event.event_type == "lead_restored":
+            return "Lead restored by an admin."
         if event.event_type == "task_scheduled":
             return f"Follow-up scheduled: {data.get('title', 'Task')}."
         if event.event_type == "task_rescheduled":
@@ -175,6 +182,7 @@ class LeadDetailSerializer(LeadListSerializer):
             "quote_amount",
             "loss_reason",
             "closed_at",
+            "archived_at",
         ]
 
 

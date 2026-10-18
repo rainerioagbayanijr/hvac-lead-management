@@ -1,0 +1,118 @@
+databases:
+  - name: service-desk-demo-db
+    region: singapore
+    plan: 0.1c-256mb
+    postgresMajorVersion: "17"
+    databaseName: service_desk_demo
+    user: service_desk_app
+    ipAllowList: []
+
+services:
+  - type: web
+    name: service-desk-demo
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health/
+    preDeployCommand: python backend/manage.py migrate --noinput
+    initialDeployHook: python backend/manage.py create_demo_data
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: localhost
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: ""
+      - key: DJANGO_TRUST_PROXY
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: service-desk-demo-db
+          property: connectionString
+      - key: POSTGRES_SSLMODE
+        value: require
+      - key: DEMO_MODE
+        value: "true"
+      - key: INTEGRATION_ADAPTER
+        value: fake
+      - key: INQUIRY_NOTIFICATION_EMAIL
+        value: demo@example.test
+      - key: DEMO_ADMIN_USERNAME
+        value: portfolio_demo_admin
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_STAFF_USERNAME
+        value: portfolio_demo_staff
+      - key: DEMO_STAFF_PASSWORD
+        sync: false
+      - key: DEMO_OTHER_STAFF_USERNAME
+        value: portfolio_demo_other
+      - key: DEMO_OTHER_STAFF_PASSWORD
+        sync: false
+
+  - type: cron
+    name: service-desk-demo-email-worker
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    schedule: "* * * * *"
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerCommand: python backend/manage.py process_email_executions --limit 50
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: localhost
+      - key: DATABASE_URL
+        fromDatabase:
+          name: service-desk-demo-db
+          property: connectionString
+      - key: POSTGRES_SSLMODE
+        value: require
+      - key: DEMO_MODE
+        value: "true"
+      - key: INTEGRATION_ADAPTER
+        value: fake
+      - key: INQUIRY_NOTIFICATION_EMAIL
+        value: demo@example.test
+
+  - type: cron
+    name: service-desk-demo-daily-reset
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    schedule: "0 16 * * *"
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    dockerCommand: python backend/manage.py reset_demo_data --confirm-demo-reset
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: localhost
+      - key: DATABASE_URL
+        fromDatabase:
+          name: service-desk-demo-db
+          property: connectionString
+      - key: POSTGRES_SSLMODE
+        value: require
+      - key: DEMO_MODE
+        value: "true"
+      - key: INTEGRATION_ADAPTER
+        value: fake
+      - key: DEMO_ADMIN_USERNAME
+        value: portfolio_demo_admin
+      - key: DEMO_STAFF_USERNAME
+        value: portfolio_demo_staff
+      - key: DEMO_OTHER_STAFF_USERNAME
+        value: portfolio_demo_other
