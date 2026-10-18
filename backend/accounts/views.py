@@ -24,7 +24,11 @@ def session_payload(user):
             "display_name": user.display_name,
             "role": user.role,
         },
-        "capabilities": {"view_leads": True, "manage_accounts": user.is_superuser},
+        "capabilities": {
+            "view_leads": True,
+            "manage_accounts": user.is_superuser,
+            "assign_leads": user.role == user.Role.ADMIN,
+        },
     }
 
 

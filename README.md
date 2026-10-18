@@ -2,7 +2,7 @@
 
 A single-business lead and follow-up application for a small air-conditioning installation and maintenance company.
 
-**Current status: Milestone 2 complete — first usable workflow.** Customers can submit a service inquiry and receive a reference. Staff can log in, view a paginated list of all leads, open inquiry details, and log out. Submissions have transactional duplicate protection, CSRF protection, validation, and database-backed rate limits. This is a local development build; hosted demo and deployment are still planned.
+**Current status: Milestone 3 complete — staff can work a lead from intake through Won/Lost.** Customers can submit service inquiries; staff can claim or receive assignments, record contact, quotes and notes, and move leads through the sales stages. Admins can assign, reassign, and reopen leads. This remains a local development build; follow-up tasks, dashboards, email integration, hosted demo, and deployment are still planned.
 
 ## Build progress
 
@@ -10,8 +10,8 @@ A single-business lead and follow-up application for a small air-conditioning in
 | --- | --- | --- |
 | 1. Local foundation and contracts | Complete | Django, PostgreSQL, Vite, configuration, migrations, and readiness check |
 | 2. Accounts and inquiry intake | Complete | Public inquiry form, staff sessions, protected lead list/detail, validation, and duplicate protection |
-| 3. Lead ownership and sales workflow | Next | Claim and assign leads, record contact and quotes, change stages, add notes, and show activity history |
-| 4. Follow-up tasks | Todo | Schedule, reschedule, complete, and cancel follow-ups; identify overdue work |
+| 3. Lead ownership and sales workflow | Complete | Claim and assign leads, record contact and quotes, change stages, add notes, and show activity history |
+| 4. Follow-up tasks | Next | Schedule, reschedule, complete, and cancel follow-ups; identify overdue work |
 | 5. Working interface and dashboard | Todo | Search and filters, pipeline, responsive workflow screens, and business metrics |
 | 6. Reliable external integration | Todo | Simulated and live email adapters, recorded attempts, safe retry, and delivery events |
 | 7. Verification and hosted demo | Todo | Critical browser checks, synthetic demo data, deployment, backup restore, and rollback rehearsal |
@@ -24,10 +24,14 @@ Update this table and the current-status paragraph when a milestone is completed
 - Accepts a fictional customer inquiry with contact, service, and request details.
 - Gives the customer a reference and safely recognizes a retry of the same submission.
 - Lets staff log in, see all submitted leads, and open a lead's details.
+- Lets staff claim unassigned leads and change only their assigned leads; admins can assign, reassign, and reopen.
+- Records manual inquiries, customer contact, first response, SGD quotes, Won/Lost outcomes, internal notes, and dated history.
 - Protects staff screens and API data with Django sessions and CSRF checks.
 - Validates requests, limits repeated public requests, and reports service health.
 
-The current build does not yet assign or edit leads, record notes or follow-up tasks, show a dashboard, or send integration alerts. Calls, messages, and quotes remain manual in the planned MVP.
+The current build does not schedule follow-up tasks, show pipeline metrics, or send integration alerts. Calls, messages, and quotes remain manual.
+
+Milestone 3's synthetic browser walkthrough is in [milestone-3-workflow.png](docs/screenshots/milestone-3-workflow.png). See the [Milestone 3 build and verification notes](docs/milestone-3.md).
 
 ## Local stack
 
@@ -135,8 +139,8 @@ Other skeleton files remain empty until their milestone needs them. Deployment s
 4. Refresh the page to check the session persists; log out to check private pages redirect to login.
 5. If submission cannot be confirmed, retry the same inquiry. The screen locks its details and reuses the submission key to avoid accidental duplicates. Only the opaque key is retained in session storage; customer fields are kept in component memory.
 
-See [Milestone 2 testing notes](docs/milestone-2.md) for results, limits, and the next build boundary.
+See [Milestone 2](docs/milestone-2.md) and [Milestone 3](docs/milestone-3.md) testing notes for results and limits.
 
 ## Next milestone
 
-Milestone 3: let staff claim unassigned leads and work on leads assigned to them; let admins assign or reassign leads. Add contact recording, quote and stage changes, notes, and activity history. Staff will continue to view all active leads but can change only their own assigned leads. See the [Milestone 3 acceptance checks](docs/implementation-plan.md#milestone-3--lead-ownership-and-sales-workflow).
+Milestone 4: add follow-up tasks staff can schedule, reschedule, complete, and cancel, and highlight overdue work. Open tasks will follow lead reassignment; closing a lead will cancel open tasks with a recorded reason. See the [Milestone 4 acceptance checks](docs/implementation-plan.md#milestone-4--follow-up-tasks).

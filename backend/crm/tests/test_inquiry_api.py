@@ -184,9 +184,9 @@ class LeadReadApiTests(TestCase):
         self.assertIsNotNone(response.json()["next"])
         self.assertEqual(len(self.client.get("/api/v1/leads/?page=2").json()["results"]), 2)
 
-    def test_mutation_endpoints_are_not_available(self):
+    def test_only_the_manual_create_endpoint_accepts_writes(self):
         self.client.force_login(self.user)
-        self.assertEqual(self.client.post("/api/v1/leads/", {}, format="json").status_code, 405)
+        self.assertEqual(self.client.post("/api/v1/leads/", {}, format="json").status_code, 400)
         for method in [self.client.patch, self.client.delete]:
             self.assertEqual(
                 method(f"/api/v1/leads/{self.lead.pk}/", {}, format="json").status_code, 405

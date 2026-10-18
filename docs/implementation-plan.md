@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: Milestones 1 and 2 implemented. Foundation verification is in `testing.md`; inquiry/session verification is in `milestone-2.md`. Milestone 3 has not begun.
+Status: Milestones 1–3 are complete. PostgreSQL-backed tests and local browser verification for Milestone 3 are recorded in `milestone-3.md`.
 
 ## Goal and constraints
 

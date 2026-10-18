@@ -15,7 +15,11 @@ export type Session =
   | {
       authenticated: true;
       user: User;
-      capabilities: { view_leads: boolean; manage_accounts: boolean };
+      capabilities: {
+        view_leads: boolean;
+        manage_accounts: boolean;
+        assign_leads: boolean;
+      };
     };
 type AuthState = {
   session: Session | null;

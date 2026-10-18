@@ -1,6 +1,6 @@
 # Testing and learning guide — Milestone 1
 
-This file preserves the Milestone 1 verification record. For the current inquiry/login workflow, use [Milestone 2 testing](milestone-2.md). The current backend development port is 8001; the connection-card preview below has been replaced by the real inquiry form.
+This file preserves the Milestone 1 verification record. For the current workflow, see [Milestone 3 testing](milestone-3.md) and [Milestone 2 testing](milestone-2.md). The current backend development port is 8001; the connection-card preview below has been replaced by the real inquiry form.
 
 ## Verification results — 13 October 2026
 

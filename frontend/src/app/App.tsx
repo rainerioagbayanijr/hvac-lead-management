@@ -5,6 +5,7 @@ import { LoginPage } from '../features/auth/LoginPage';
 import { InquiryPage } from '../features/inquiries/InquiryPage';
 import { LeadListPage } from '../features/leads/LeadListPage';
 import { LeadDetailPage } from '../features/leads/LeadDetailPage';
+import { NewLeadPage } from '../features/leads/NewLeadPage';
 import { Notice } from '../components/ui/Notice';
 import { AppShell } from './AppShell';
 
@@ -47,6 +48,14 @@ export function App() {
               element={
                 <Protected>
                   <LeadDetailPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/app/leads/new"
+              element={
+                <Protected>
+                  <NewLeadPage />
                 </Protected>
               }
             />

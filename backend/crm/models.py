@@ -38,6 +38,10 @@ class Lead(models.Model):
     requirements = models.TextField(max_length=4000, blank=True, default="")
     source = models.CharField(max_length=20, choices=Source.choices, default=Source.WEBSITE)
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.NEW)
+    first_contact_at = models.DateTimeField(null=True, blank=True)
+    quote_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    loss_reason = models.CharField(max_length=500, blank=True, default="")
+    closed_at = models.DateTimeField(null=True, blank=True)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -90,6 +94,28 @@ class Lead(models.Model):
             ),
             models.CheckConstraint(
                 condition=models.Q(version__gte=1), name="lead_version_positive"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(quote_amount__isnull=True) | models.Q(quote_amount__gt=0),
+                name="lead_quote_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(stage="lost", loss_reason__regex=r"\S")
+                    | (~models.Q(stage="lost") & models.Q(loss_reason=""))
+                ),
+                name="lead_loss_reason_matches_stage",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(stage__in=["won", "lost"], closed_at__isnull=False)
+                    | models.Q(stage__in=["new", "contacted", "quoted"], closed_at__isnull=True)
+                ),
+                name="lead_closed_time_matches_stage",
+            ),
+            models.CheckConstraint(
+                condition=(~models.Q(stage__in=["quoted", "won"]) | models.Q(quote_amount__gt=0)),
+                name="lead_quoted_stage_has_quote",
             ),
             models.CheckConstraint(
                 condition=(
@@ -150,7 +176,26 @@ class ActivityEvent(models.Model):
     event_type = models.CharField(max_length=40, default="created")
     occurred_at = models.DateTimeField(default=timezone.now)
     metadata = models.JSONField(default=dict)
+    action_key = models.UUIDField(null=True, blank=True)
+    request_fingerprint = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         ordering = ["occurred_at", "id"]
         indexes = [models.Index(fields=["lead", "occurred_at"], name="activity_lead_time_idx")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["lead", "action_key"],
+                condition=models.Q(action_key__isnull=False),
+                name="activity_lead_action_key_unique",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(action_key__isnull=True, request_fingerprint="")
+                    | models.Q(
+                        action_key__isnull=False,
+                        request_fingerprint__regex=r"^[a-f0-9]{64}$",
+                    )
+                ),
+                name="activity_action_fingerprint_valid",
+            ),
+        ]

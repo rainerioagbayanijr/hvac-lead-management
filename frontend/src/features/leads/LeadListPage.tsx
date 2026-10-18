@@ -44,16 +44,22 @@ export function LeadListPage() {
             Review the latest requests from prospective customers.
           </p>
         </div>
-        <button
-          className="button-secondary"
-          onClick={() => setRevision((value) => value + 1)}
-          disabled={loading}
-        >
-          Refresh inquiries
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <Link className="button-primary" to="/app/leads/new">
+            Add inquiry
+          </Link>
+          <button
+            className="button-secondary"
+            onClick={() => setRevision((value) => value + 1)}
+            disabled={loading}
+          >
+            Refresh inquiries
+          </button>
+        </div>
       </div>
       <p className="mt-5 text-sm text-slate-500">
-        All team inquiries, newest first. Open a customer to view contact and service details.
+        All team inquiries, newest first. Staff can update leads assigned to them; admins can assign
+        and reassign.
       </p>
       <div className="mt-6">
         {loading && <Notice>Loading inquiries…</Notice>}

@@ -1,49 +1,48 @@
-# Architecture — current local implementation
+# Architecture — Milestone 3
 
 ```mermaid
 flowchart TD
     Browser[Customer or staff browser] --> Vite[Vite on localhost:5173]
-    Vite --> React[React / TypeScript / Tailwind]
-    Vite -->|API proxy| Django[Django / DRF on localhost:8001]
-    Django --> Sessions[Django authentication and CSRF]
-    Django --> Intake[Transactional inquiry service]
-    Django --> Reads[Authenticated lead reads]
-    Django --> Limits[Shared rate-limit counters]
-    Sessions --> DB[(PostgreSQL 17 on localhost:55432)]
-    Intake --> DB
-    Reads --> DB
-    Limits --> DB
+    Vite --> React[React / TypeScript / Tailwind screens]
+    Vite -->|same-origin API proxy| Django[Django / DRF on localhost:8001]
+    Django --> Auth[Django session, role, and CSRF checks]
+    Django --> CRM[Inquiry and lead workflow services]
+    CRM -->|atomic writes and row locks| PG[(PostgreSQL 17)]
+    CRM -->|lead and activity event together| PG
+    Django -->|team options for admins| Auth
 ```
 
 ## Responsibilities
 
-- React Router provides directly addressable inquiry, login, list, and detail screens.
-- AuthProvider keeps session state, protects screen navigation, and cancels obsolete session reads after login/logout. Server permissions independently protect data.
-- The API client obtains a fresh CSRF token before writes, includes same-origin cookies, bounds requests, and exposes predictable errors.
-- Django AuthenticationForm and session functions handle credentials, password hashing, login rotation, fixed expiry, and logout.
-- InquirySerializer validates public fields and rejects privileged/unknown input.
-- The CRM service hashes the normalized original payload and commits Lead plus initial ActivityEvent together.
-- PostgreSQL enforces unique submission keys. A concurrent losing insert rolls back before reading/replaying the winner. A changed payload under the key conflicts.
-- Shared rate counters use database row locks and hashed identifiers. No cache service, queue, or Redis is needed.
-- Lead list/detail are read-only to authenticated staff/admin. Staff see the whole team pipeline; write permissions arrive with ownership in Milestone 3.
-- Readiness still runs a real PostgreSQL query and returns minimal success/unavailable states.
+- React Router provides customer inquiry, login, lead list, lead detail, and manual-entry screens. UI checks decide which controls to show; they do not authorize a write.
+- Django sessions authenticate browser requests. The application role decides staff/admin actions, and CSRF protects every write. Django's separate technical admin flag controls access to Django admin.
+- Inquiry and workflow serializers validate submitted fields and reject unknown/privileged fields. The API views connect those validated requests to the workflow services.
+- CRM services own business rules. `workflow.py` locks one lead row, checks the expected version and role/owner, changes the lead, increments its version, and writes an activity event in one transaction.
+- PostgreSQL constraints protect valid stages, closure fields, quotes, and action-key uniqueness. Row locks serialize claims so simultaneous staff claims have one winner.
+- Each staff action has an idempotency key and a fingerprint of the actor and business fields. A repeated identical request returns the saved lead; changed content under the same key conflicts.
+- Activity history uses readable summaries in the API. Note bodies and loss reasons remain private to authenticated staff; public inquiry responses still reveal only the opaque reference.
+- PostgreSQL is also used for sessions and shared rate counters. No queue or Redis is needed for the current workflow. Scheduled work belongs to a later milestone.
 
-## Local operation
+## Lead workflow
 
-PostgreSQL runs in one dedicated Docker container and volume; only localhost port 55432 is published. Django and Vite run as normal local processes. Port 8001 avoids another Docker application's existing port 8000.
+Website intake creates a New, unassigned lead and its initial event together. Staff can also enter inquiries received by phone, email, WhatsApp, referral, or another source; the creator owns that entry. Admins assign or reassign leads to active team users. Staff can see all leads, claim unassigned active leads, and mutate only their assigned leads.
 
-Local settings load the ignored root .env without replacing exported values. Production settings do not load it and reject missing secrets/hosts/TLS configuration. The local-account helper is restricted to DEBUG plus a local database and writes generated passwords only to an ignored private file.
+Recording customer contact writes the contact method, first-contact time (only if empty), and an activity event. A first contact on a New lead moves it to Contacted. Contact later than the first response remains in the history without changing the first-contact metric.
 
-The custom user predates initial migrations. CRM services explicitly validate models; save alone does not run full validation. Bulk updates must never change original submission identity.
+Contacted leads can receive a positive SGD quote and move to Quoted. Quoted leads can become Won. An open lead can become Lost only with a reason. Admins can reopen a closed lead; the prior close event remains in the append-only history. Calls, messages, and quotes are still performed manually.
 
-## Failure behavior
+## Concurrency and failures
 
-Validation does not create records. A failure writing the creation event rolls back the lead. A lost/uncertain response is retried using the same key and unchanged payload, so either the first stored lead is returned or one new record is created. Client details remain locked during uncertain retries. Only the opaque key is retained in session storage; customer fields stay in component memory.
+All workflow mutation requests carry an expected lead version. If another request wins first, stale changes receive a conflict and the user must refresh. The client action key makes a retry safe after a lost response. Activity write failure rolls the lead change back, so no unrecorded mutation is committed.
 
-A 403 not_authenticated expires client session state and returns the user to login. Reloading a private URL checks the server session before rendering records.
+The lost response case is handled before the version check when the same action key, actor, and payload already have an event. This avoids repeating contact notes or business effects. A reused key with changed payload is rejected.
+
+Public inquiry behavior remains transactional and idempotent on the original submission key. No external message is sent in Milestone 3.
+
+## Local and production operation
+
+PostgreSQL runs in one dedicated local Docker container and volume; only localhost port 55432 is published. Django and Vite run as ordinary local processes. Production settings do not read the local `.env` and require secure host/TLS configuration. Production will serve the compiled frontend and API from one origin.
 
 ## Later work
 
-Milestone 3 adds ownership and transactional mutation permissions, contact/stage actions, notes, and their history. Follow-up tasks, reporting, and external alerts follow.
-
-Production will serve the compiled frontend and API from one origin. Integration executions will be created alongside future inquiry transactions and processed by a scheduled command after commit, with provider idempotency and verified webhooks. Those integrations and production asset hosting are not implemented yet.
+Milestone 4 adds follow-up tasks and overdue views. Milestone 5 adds pipeline reporting, filters, exports, and dashboard metrics. Milestone 6 records external email executions with bounded retries and verified webhooks. Hosted synthetic demo, backups, restore and release rollback remain Milestone 7.
